@@ -6,79 +6,66 @@
 #include<sys/types.h>
 #include<sys/un.h>
 
+#define SOCK_PATH "./MySock"
+
 
 int main(int argc, char const *argv[])
 {
     
-    // create temporary socket file
-    char temp[] = "/tmp/MySock";
-    int fd = mktemp(temp);
-    if (fd == -1) {
-        perror("mkdtemp");
-        exit(1);
-    }
-    close(fd);
-
-    // delete any existing element using the same file name
-    unlink(temp);
-
-
-    // declaration des variables 
-    int ssocket, csocket;
-    struct sockaddr_un saddr, caddr;
+    int server_sock, client_sock;
+    struct sockaddr_un server_sockaddr, client_sockaddr;
     char buffer[1024];
-
-    // config de l'adresse serveur 
-    memset(&saddr, 0, sizeof(struct sockaddr_un));
-    saddr.sun_family = AF_UNIX;
-    strcpy(saddr.sun_path, "/tmp/MySock");
-    // config de l'adresse client
-    memset(&caddr, 0, sizeof(struct sockaddr_un));
-    // creation du socket serveur
-    ssocket = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (ssocket < 0) {
+ 
+    memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+    server_sockaddr.sun_family = AF_UNIX;
+    strcpy(server_sockaddr.sun_path, SOCK_PATH);
+    
+    memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
+    
+    server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (server_sock < 0) {
         perror("Error creating socket.\n");
         exit(1);
     }
 
-    if (bind(ssocket, (struct sockaddr*)&saddr, sizeof(saddr)) < 0) {
+    unlink("./MySock");
+    
+    if (bind(server_sock, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) < 0) {
         perror("Error connecting socket.\n");
         exit(1);
     }
 
-    if (listen(ssocket, 5) < 0) {  
+    if (listen(server_sock, 5) < 0) {  
         perror("Error listening connections \n");
         exit(1);
     }
 
     while (1)
     {
-        int client_len = sizeof(caddr);
-        int sservice = accept(ssocket, (struct sockaddr*)&caddr, &client_len);
-        if (sservice < 0) {
+        int client_len = sizeof(client_sockaddr);
+        int server_service = accept(server_sock, (struct sockaddr*)&client_sockaddr, &client_len);
+        if (server_service < 0) {
             perror("Error accepting connection.\n");
             continue;
         }
-
-        // reception 
-        if (recv(sservice, buffer, strlen(buffer), 0) < 0) {
+         
+        if (recv(server_service, buffer, strlen(buffer), 0) < 0) {
             perror("Error receiving data. \n");
             exit(1);
         }
         printf("Message recu : %s\n", buffer);
 
-        // envoi
         strcat(buffer, buffer);
         printf("Message double %s\n", buffer);
-        if (send(sservice, buffer, strlen(buffer), 0) < 0) {
+        if (send(server_service, buffer, strlen(buffer), 0) < 0) {
             perror("Error sending data. \n");
             exit(1);
         }
 
-        shutdown(sservice, SHUT_RDWR);
-        close(sservice);
+        shutdown(server_service, SHUT_RDWR);
+        close(server_service);
     }
     
-    close(ssocket);
+    close(server_sock);
     exit(0);
 }

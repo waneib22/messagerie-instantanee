@@ -6,58 +6,48 @@
 #include<sys/types.h>
 #include<sys/un.h>
 
-#define SOCK_PATH "/tmp/MySock"
+#define SOCK_PATH "./MySock"
 
 
 int main(int argc, char const *argv[])
 {
     
-    // declaration des variables
-    int csocket;
-    struct sockaddr_un saddr;
+    int client_sock;
+    struct sockaddr_un server_sockaddr;
     char buffer[1024];
 
 
-    // config de l'adresse serveur
-    memset(&saddr, 0, sizeof(struct sockaddr_un));
-    saddr.sun_family = AF_UNIX;
-    strcpy(saddr.sun_path, SOCK_PATH);
-    //creation socket client
-    csocket = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (csocket < 0) {
+    memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+    server_sockaddr.sun_family = AF_UNIX;
+    strcpy(server_sockaddr.sun_path, SOCK_PATH);
+
+    client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (client_sock < 0) {
         perror("Error creating socket.\n");
         exit(1);
     }
 
-    // liaison socket-adresse
-    if (bind(csocket, (struct sockaddr*)&saddr, sizeof(saddr)) < 0) {
-        perror("Error connecting socket.\n");
-        exit(1);
-    }
-
-    // etablir une connexion
-    if (connect(csocket, (struct sockaddr*)&saddr, sizeof(saddr)) < 0) {
+    if (connect(client_sock, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) < 0) {
         perror("Error connecting.\n");
         exit(1);
     }
 
-    // envoi/reception
     while(1) {
-        printf("write your message here.\t");
+        printf(">\t");
         fgets(buffer, sizeof(buffer), stdin);
-        if (send(csocket, buffer, strlen(buffer), 0) < 0) {
+        if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
             perror("error sending message.\n");
             exit(1);
         }
 
-        if (recv(csocket, buffer, strlen(buffer), 0) < 0) {
+        if (recv(client_sock, buffer, strlen(buffer), 0) < 0) {
             perror("error receiving message.\n");
             exit(1);
         }
         buffer[1024] = '\0';
-        printf("message recu %s\n", buffer);
+        printf("received message >> %s\n", buffer);
     }
 
-    close(csocket);
+    close(client_sock);
     exit(0);
 }
