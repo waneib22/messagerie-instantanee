@@ -19,21 +19,29 @@ int main(int argc, char const *argv[])
     struct sockaddr_un server_sockaddr;
     char buffer[BUFFER_SIZE];
 
+    // configuration adresse serveur
     memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
     server_sockaddr.sun_family = AF_UNIX;
     strcpy(server_sockaddr.sun_path, SOCK_PATH);
 
+    // creation socket client
     client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock < 0) {
         perror("creating client socket failed ...\n");
         exit(1);
     }
 
+    // tentative de connexion du client au serveur
     if (connect(client_sock, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) != 0) {
         perror("connecting to server failed ... \n");
         exit(1);
     }
 
+    /**
+     * boucle infinie dans laquelle le client 
+     * envoie un message au serveur et reçoit
+     * un message de la part du serveur 
+    */ 
     while(1) {
         printf(">\t");
         fgets(buffer, sizeof(buffer), stdin);
@@ -47,7 +55,7 @@ int main(int argc, char const *argv[])
             exit(1);
         }
         
-        buffer[1024] = '\0';
+        buffer[BUFFER_SIZE] = '\0';
         printf("received message >> %s\n", buffer);
     }
 
