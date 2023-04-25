@@ -13,6 +13,12 @@
 // le nombre maximum de clients
 #define MAX_CLIENTS 10
 
+/**
+ * le nombre maximum de messages 
+ * que peut recevoir un client
+*/
+#define MAX_MESSAGES 100
+
 /** le fichier dans lequel les clients
  * et le serveur communiquent
 */
@@ -26,6 +32,38 @@ typedef struct {
 client_t clients[MAX_CLIENTS];
 int num_clients = 0;
 pthread_mutex_t mutex_num_client;
+
+char message_list[MAX_CLIENTS][MAX_MESSAGES][BUFFER_SIZE];
+int num_message[MAX_CLIENTS] = {0};
+pthread_mutex_t mutex_message_list;
+
+
+/**
+ * fonction ajoutant a chaque reception
+ * d'un message du client, le message 
+ * dans sa liste
+*/
+void add_message(int user_index, char* message) {
+    pthread_mutex_lock(&mutex_message_list);
+    printf("Ajout message %d du client %d \n", num_message[user_index]+1, user_index);
+    strcpy(message_list[user_index][num_message[user_index]], message);
+    num_message[user_index]++;
+    pthread_mutex_unlock(&mutex_message_list);
+}
+
+
+/**
+ * fonction retournant tous les 
+ * messages envoyés par l'utilisateur
+*/
+char* get_messages(int user_index) {
+    pthread_mutex_lock(&mutex_message_list);
+    char* messages = malloc(num_message[user_index] * sizeof(char));
+    for(int i = 0; i < num_message[user_index]; i++) {
+        messages[i] = message_list[user_index][i];
+    }
+    return messages;
+}
 
 
 /**
@@ -44,6 +82,27 @@ void* handle_client(void* arg) {
         pthread_exit(NULL);
     }
     printf("Message received : %s\n", buffer);
+
+    // recherche d'un client
+    int user_index = -1;
+    for(int i = 0; i < num_clients; i++) {
+        if (clients[i].sock = client_sock) {
+            user_index = i;
+            break;
+        }
+    }
+
+    if (user_index == -1) {
+        printf("Client not found in clients list ... \n");
+        close(client_sock);
+        pthread_exit(NULL);
+    }
+
+    /**
+     * si client trouve, ajoute son message 
+     * dans sa liste
+    */
+    add_message(user_index, buffer);
 
     if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
         perror("server sending message failed ... \n");
@@ -168,6 +227,14 @@ int main(int argc, char const *argv[])
 
     }
     
+    for (int i = 0; i < num_clients; i++) {
+        for (int j = 0; j < num_message[i]; j++) {
+            free(message_list[i][j]);
+        }
+    }
+
+    pthread_mutex_destroy(&mutex_message_list);
+    pthread_mutex_destroy(&mutex_num_client);
     close(server_sock);
     exit(EXIT_SUCCESS);
 }
