@@ -42,23 +42,29 @@ int main(int argc, char const *argv[])
      * envoie un message au serveur et reçoit
      * un message de la part du serveur 
     */ 
-    while(1) {
+    
+    //Saisie du msg à envoyer : 
+    printf("Entrez votre message : ");
+    fgets(message, MESSAGE_SIZE, stdin);
+    snprintf(message, BUFFER_SIZE, "%s: %s", utilisateur, buffer); 
+    // le msg est stocké selon le protocol choisi
+    
+   /* while(1) {
         printf(">\t");
         fgets(buffer, sizeof(buffer), stdin);
         if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
             perror("sending message to server failed ... \n");
             exit(1);
-        }
-
-        if (recv(client_sock, buffer, strlen(buffer), 0) < 0) {
-            perror("receiving message from server failed ... \n");
-            exit(1);
-        }
-        
-        buffer[BUFFER_SIZE] = '\0';
-        printf("received message >> %s\n", buffer);
+        }*/
+    
+    //Envoi du msg au serveur :
+    if (send(sock, message, strlen(message), 0) < 0) {
+        printf("Error while sending message.\n");
+        return -1;
     }
-
+    printf("Message sent successfully.. \n");        
+        
+        
     close(client_sock);
-    exit(0);
+    return 0;
 }
