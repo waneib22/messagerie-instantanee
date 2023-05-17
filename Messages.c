@@ -93,4 +93,63 @@ void *connection_handler(void *socket_desc) {
         user_index = i;
         break;
     }
+            
+void *client_handler(void *socket_desc) {
+    int sock = *(int*)socket_desc;
+    char buffer[BUFFER_SIZE];
+
+    while(1) {
+        int bytes_received = recv(sock, buffer, BUFFER_SIZE-1, 0);
+        if (bytes_received < 0) {
+            perror("Error receiving message from client !\n");
+            close(sock);
+            free(socket_desc);
+            pthread_exit(NULL);
+        } else if (bytes_received == 0) {
+            printf("Connection closed by client %d\n", sock);
+            close(sock);
+            free(socket_desc);
+            pthread_exit(NULL);
+        }
+
+        buffer[bytes_received] = '\0';
+        printf("Received message from client %d: %s\n", sock, buffer);
+
+        // Check if the user is in the list
+        int user_index = -1;
+        for (int i = 0; i < num_users; i++) {
+            if (strncmp(messages[i], buffer, strlen(buffer)-1) == 0) {
+                user_index = i;
+                break;
+            }
+        }
+
+        // Add user to the list if not the case
+        if (user_index == -1) {
+            if (num_users >= MAX_CLIENTS) {
+                printf("Maximum number of clients reached. Closing connection with client %d\n", sock);
+                close(sock);
+                free(socket_desc);
+                pthread_exit(NULL);
+            }
+            user_index = num_users;
+            num_users++;
+            strcpy(messages[user_index], buffer);
+            printf("New user registered: %s\n", messages[user_index]);
+        }
+
+        // Send received message to all connected users
+        for (int i = 0; i < num_users; i++) {
+            if (i != user_index) {
+                if (send(sockets[i], buffer, strlen(buffer), 0) < 0) {
+                    perror("Error sending message to client\n");
+                    close(sock);
+                    free(socket_desc);
+                    pthread_exit(NULL);
+                }
+            }
+        }
+    }
+}
+
 }
