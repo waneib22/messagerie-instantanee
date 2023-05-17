@@ -11,12 +11,9 @@
 #define BUFFER_SIZE 1024
 
 // le nombre maximum de clients
-#define MAX_CLIENTS 10
+#define MAX_USERS 10
 
-/**
- * le nombre maximum de messages 
- * que peut recevoir un client
-*/
+// le nbr max de messages que peut envoyer/recevoir un client
 #define MAX_MESSAGES 100
 
 /** le fichier dans lequel les clients
@@ -24,57 +21,66 @@
 */
 #define SOCK_PATH "./MySock"
 
+char messages[MAX_USERS][MAX_MESSAGES][BUFFER_SIZE];
+
+int message_count[MAX_USERS] = {0};
+
 typedef struct {
     int sock;
     struct sockaddr_un addr;
 } client_t;
 
-client_t clients[MAX_CLIENTS];
+client_t clients[MAX_USERS];
 int num_clients = 0;
 pthread_mutex_t mutex_num_client;
-
-char message_list[MAX_CLIENTS][MAX_MESSAGES][BUFFER_SIZE];
-int num_message[MAX_CLIENTS] = {0};
-pthread_mutex_t mutex_message_list;
+pthread_mutex_t mutex_messages;
 
 
-/**
- * fonction ajoutant a chaque reception
- * d'un message du client, le message 
- * dans sa liste
-*/
-void add_message(int user_index, char* message) {
-    pthread_mutex_lock(&mutex_message_list);
-    printf("Ajout message %d du client %d \n", num_message[user_index]+1, user_index);
-    strcpy(message_list[user_index][num_message[user_index]], message);
-    num_message[user_index]++;
-    pthread_mutex_unlock(&mutex_message_list);
-}
-
-
-/**
- * fonction retournant tous les 
- * messages envoyés par l'utilisateur
-*/
-char* get_messages(int user_index) {
-    pthread_mutex_lock(&mutex_message_list);
-    char* messages = malloc(num_message[user_index] * sizeof(char));
-    for(int i = 0; i < num_message[user_index]; i++) {
-        messages[i] = message_list[user_index][i];
+void save(int user_index, const char* message) {
+    pthread_mutex_lock(&mutex_messages);
+    int count = message_count[user_index];
+    if (count < MAX_MESSAGES) {
+        strncpy(messages[user_index][count], message, BUFFER_SIZE);
+        message_count[user_index]++;
     }
-    return messages;
+    pthread_mutex_unlock(&mutex_messages);
 }
 
+
+void get_message(int user_index, char** user_message, int* num_message) {
+    pthread_mutex_lock(&mutex_messages);
+    * num_message = message_count[user_index];
+    for(int i = 0; i < message_count[user_index]; i++) {
+        user_message[i] = messages[user_index][i];
+    }
+    pthread_mutex_unlock(&mutex_messages);
+}
 
 /**
  * fonction thread permettant de recevoir 
  * des messages de la part des clients et 
  * d'envoyer des messages au clients
 */
-void* handle_client(void* arg) {
+void* handle_client(void* socket_desc) {
 
-    int client_sock = *(int*) arg;
+    int client_sock = *(int*) socket_desc;
     char buffer[BUFFER_SIZE] = {0};
+
+    while (1)
+    {
+        if (recv(client_sock, buffer, BUFFER_SIZE, 0) < 0) {
+            perror("receiving message from client failed ... \n");
+            exit(1);
+        }
+        buffer[BUFFER_SIZE - 1] = '\0';
+        printf("received message from client %d: %s\n", client_sock, buffer);
+
+        int user_index = -1;
+        for(int i = 0; i < MAX_USERS; i++) {
+            
+        }
+    }
+    
 
     if (recv(client_sock, buffer, BUFFER_SIZE, 0) < 0) {
         perror("server receiving failed ... \n");
@@ -83,26 +89,10 @@ void* handle_client(void* arg) {
     }
     printf("Message received : %s\n", buffer);
 
-    // recherche d'un client
-    int user_index = -1;
-    for(int i = 0; i < num_clients; i++) {
-        if (clients[i].sock = client_sock) {
-            user_index = i;
-            break;
-        }
-    }
-
-    if (user_index == -1) {
-        printf("Client not found in clients list ... \n");
-        close(client_sock);
-        pthread_exit(NULL);
-    }
-
-    /**
-     * si client trouve, ajoute son message 
-     * dans sa liste
-    */
-    add_message(user_index, buffer);
+    pthread_mutex_lock(&mutex_num_client);
+    int client_index = num_clients - 1;
+    save(client_index, buffer);
+    pthread_mutex_unlock(&mutex_num_client);
 
     if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
         perror("server sending message failed ... \n");
@@ -178,7 +168,7 @@ int main(int argc, char const *argv[])
             continue;
         }
 
-        if (num_clients >= MAX_CLIENTS) {
+        if (num_clients >= MAX_USERS) {
             printf("Too many clients. Closing connection. \n");
             close(client_sock);
             continue;
@@ -227,14 +217,6 @@ int main(int argc, char const *argv[])
 
     }
     
-    for (int i = 0; i < num_clients; i++) {
-        for (int j = 0; j < num_message[i]; j++) {
-            free(message_list[i][j]);
-        }
-    }
-
-    pthread_mutex_destroy(&mutex_message_list);
-    pthread_mutex_destroy(&mutex_num_client);
     close(server_sock);
     exit(EXIT_SUCCESS);
 }
