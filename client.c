@@ -6,10 +6,20 @@
 #include<sys/socket.h>
 #include<sys/types.h>
 #include<sys/un.h>
+#include<signal.h>
 
 #define BUFFER_SIZE 1024
 
 #define SOCK_PATH "./MySock"
+
+int composing_message = 0;
+pthread_cond_t cond_composing_signal;
+pthread_mutex_t mutex_composing_signal;
+
+void handle_sigint(int signum) {
+    composing_message = 1;
+    pthread_cond_signal(&cond_composing_signal);
+}
 
 
 int main(int argc, char const *argv[])
@@ -25,6 +35,13 @@ int main(int argc, char const *argv[])
     server_sockaddr.sun_family = AF_UNIX;
     strcpy(server_sockaddr.sun_path, SOCK_PATH);
 
+    // initialisation du mutex et de la condition
+    pthread_mutex_init(&mutex_composing_signal, NULL);
+    pthread_cond_init(&cond_composing_signal, &mutex_composing_signal);
+
+    // installation signal CTRL+C
+    signal(SIGINT, handle_sigint);
+
     // creation socket client
     client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock < 0) {
@@ -37,7 +54,7 @@ int main(int argc, char const *argv[])
         perror("connecting to server failed ... \n");
         exit(1);
     }
-
+    
     /**
      * boucle infinie dans laquelle le client 
      * envoie un message au serveur et reçoit
@@ -45,8 +62,17 @@ int main(int argc, char const *argv[])
     */ 
     while(1) {
         printf("Enter your message (or 'exit' to quit): \n");
-        fgets(buffer, sizeof(buffer), stdin);
 
+        // Demande de blocage pour ecrire un message
+        pthread_mutex_lock(&mutex_composing_signal);
+        while (composing_message)
+        {
+            pthread_cond_wait(&cond_composing_signal, &mutex_composing_signal);
+
+        }
+        pthread_mutex_unlock(&mutex_composing_signal);
+
+        fgets(buffer, sizeof(buffer), stdin);
         buffer[strcspn(buffer, "\n")] = '\0';
 
         if (strcmp(buffer, "exit") == 0) {
@@ -58,7 +84,20 @@ int main(int argc, char const *argv[])
             exit(1);
         }
 
-        memchr(buffer, 0, sizeof(buffer));
+        // reception des messages renvoyes par le serveur
+        while (1)
+        {
+            memset(buffer, 0, sizeof(buffer));
+            if (recv(client_sock, buffer, sizeof(buffer) - 1, 0) < 0) {
+                perror("receiving messages from server failed ... \n");
+                exit(1);
+            }
+
+            if (strcmp(buffer, "END") == 0) {
+                break;
+            }
+        }
+        
 
         if (recv(client_sock, buffer, sizeof(buffer) - 1, 0) < 0) {
             perror("receiving message failed ... \n");

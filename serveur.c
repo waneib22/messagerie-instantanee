@@ -96,6 +96,10 @@ void* handle_client(void* socket_desc) {
             }
         }
 
+        if (strcmp(buffer, "END") == 0) {
+            break;
+        }
+
     }
 
     pthread_mutex_lock(&mutex_num_client);
