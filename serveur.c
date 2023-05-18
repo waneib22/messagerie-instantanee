@@ -22,7 +22,6 @@
 #define SOCK_PATH "./MySock"
 
 char messages[MAX_USERS][MAX_MESSAGES][BUFFER_SIZE];
-
 int message_count[MAX_USERS] = {0};
 
 typedef struct {
@@ -75,19 +74,29 @@ void* handle_client(void* socket_desc) {
         buffer[BUFFER_SIZE - 1] = '\0';
         printf("received message from client %d: %s\n", client_sock, buffer);
 
+        // Check if the user is in the list
         int user_index = -1;
         for(int i = 0; i < MAX_USERS; i++) {
-            
+            if (strncmp(messages[i], buffer, strlen(buffer)-1)) {
+                user_index = i;
+                break;
+            }
         }
-    }
-    
 
-    if (recv(client_sock, buffer, BUFFER_SIZE, 0) < 0) {
-        perror("server receiving failed ... \n");
-        close(client_sock);
-        pthread_exit(NULL);
+        // Send received message to all connected users alongside the user ID
+        char message_with_id[BUFFER_SIZE];
+        snprintf(message_with_id, BUFFER_SIZE, "User %d: %s", user_index, buffer);
+        for (int i = 0; i < num_clients; i++) {
+            if (i != user_index) {
+                if (send(clients[i].sock, buffer, strlen(buffer), 0) < 0) {
+                    perror("Error sending message to client\n");
+                    close(client_sock);
+                    pthread_exit(NULL);
+                }
+            }
+        }
+
     }
-    printf("Message received : %s\n", buffer);
 
     pthread_mutex_lock(&mutex_num_client);
     int client_index = num_clients - 1;
@@ -115,7 +124,8 @@ int main(int argc, char const *argv[])
     int server_sock, client_sock;
     struct sockaddr_un server_addr, client_addr;
     char buffer[BUFFER_SIZE];
- 
+
+
     // congiguration adresse serveur
     memset(&server_addr, 0, sizeof(struct sockaddr_un));
     server_addr.sun_family = AF_UNIX;
@@ -152,6 +162,7 @@ int main(int argc, char const *argv[])
         exit(1);
     }
 
+    printf("server is ready to receive clients ...\n");
 
     /**
      * dans cette boucle, on génère un thread
@@ -174,6 +185,9 @@ int main(int argc, char const *argv[])
             continue;
         }
         
+        // ne pas oublier l'id du client 
+        printf("connection accepted from client %d\n", client_sock);
+
         /**ajout d'un client à chaque nouvelle
          * connextion en utilisant la structure
          * client_t

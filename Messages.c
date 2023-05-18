@@ -10,6 +10,7 @@
 #define BUFFER_SIZE 1024
 #define MAX_CLIENTS 10
 #define SOCK_PATH "./MySock"
+int sockets[MAX_CLIENTS];
 
 char **messages; // matrice dynamique pour stocker les messages des utilisateurs
 int num_users = 0; // nombre d'utilisateurs connectés
@@ -149,7 +150,9 @@ void *client_handler(void *socket_desc) {
                 }
             }
         }
+
+        free(socket_desc);
+        pthread_exit(NULL);
     }
 }
 
-}

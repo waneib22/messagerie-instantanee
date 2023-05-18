@@ -16,6 +16,7 @@ int main(int argc, char const *argv[])
 {
     
     int client_sock;
+    int clientNumber;
     struct sockaddr_un server_sockaddr;
     char buffer[BUFFER_SIZE];
 
@@ -64,11 +65,9 @@ int main(int argc, char const *argv[])
             exit(1);
         }
 
-        int clientNumber;
-        char message[1024];
-        sscanf(buffer, "%d %[^/]%s",clientNumber, message);
+        sscanf(buffer, "%d %[^\n]", &clientNumber, buffer);
 
-        printf("received message from client %d, %s\n", clientNumber, message);
+        printf("received message from client %d, %s\n", clientNumber, buffer);
     }
 
     close(client_sock);
