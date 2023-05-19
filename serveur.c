@@ -56,9 +56,8 @@ void get_message(int user_index, char** user_message, int* num_message) {
 }
 
 /**
- * fonction thread permettant de recevoir 
- * des messages de la part des clients et 
- * d'envoyer des messages au clients
+ * fonction thread permettant de recevoir des messages de la part des clients 
+ * et d'envoyer des messages au clients
 */
 void* handle_client(void* socket_desc) {
 
@@ -68,13 +67,13 @@ void* handle_client(void* socket_desc) {
     while (1)
     {
         if (recv(client_sock, buffer, BUFFER_SIZE, 0) < 0) {
-            perror("receiving message from client failed ... \n");
+            perror("echec reception message a partir du client ... \n");
             exit(1);
         }
         buffer[BUFFER_SIZE - 1] = '\0';
-        printf("received message from client %d: %s\n", client_sock, buffer);
+        printf("message recu a partir du client %d: %s\n", client_sock, buffer);
 
-        // Check if the user is in the list
+        // Verifie si le client est dans la liste
         int user_index = -1;
         for(int i = 0; i < MAX_USERS; i++) {
             if (strncmp(messages[i], buffer, strlen(buffer)-1)) {
@@ -83,20 +82,22 @@ void* handle_client(void* socket_desc) {
             }
         }
 
-        // Send received message to all connected users alongside the user ID
+        // Le serveur envoie le message recu a tous les clients avec l'ID du client envoyant 
         char message_with_id[BUFFER_SIZE];
-        snprintf(message_with_id, BUFFER_SIZE, "User %d: %s", user_index, buffer);
+        snprintf(message_with_id, BUFFER_SIZE, "Client %d: %s", user_index, buffer);
         for (int i = 0; i < num_clients; i++) {
             if (i != user_index) {
                 if (send(clients[i].sock, buffer, strlen(buffer), 0) < 0) {
-                    perror("Error sending message to client\n");
+                    perror("Echec envoi message\n");
                     close(client_sock);
                     pthread_exit(NULL);
                 }
             }
         }
 
-        if (strcmp(buffer, "END") == 0) {
+        send(client_sock, "FIN", strlen("FIN"), 0);
+
+        if (strcmp(buffer, "FIN") == 0) {
             break;
         }
 
@@ -108,13 +109,13 @@ void* handle_client(void* socket_desc) {
     pthread_mutex_unlock(&mutex_num_client);
 
     if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
-        perror("server sending message failed ... \n");
+        perror("echec envoi message par le serveur ... \n");
     } else {
-        printf("Message sent : %s\n", buffer);
+        printf("Message envoye : %s\n", buffer);
     }
 
     if (close(client_sock) != 0) {
-        perror("closing client socket failed ... \n");
+        perror("echec fermeture socket client ... \n");
     }
 
     pthread_exit(NULL);
@@ -144,7 +145,7 @@ int main(int argc, char const *argv[])
     // creation du socket serveur
     server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_sock < 0) {
-        perror("creating server socket failed ... \n");
+        perror("echec creation socket serveur ... \n");
         exit(1);
     }
 
@@ -156,17 +157,17 @@ int main(int argc, char const *argv[])
     
     // liaison socket serveur et adresse serveur
     if (bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
-        perror("connecting server socket failed ... \n");
+        perror("echec connexion serveur ... \n");
         exit(1);
     }
 
     // ecoute des connexions
     if (listen(server_sock, 5) != 0) {  
-        perror("listening connection failed ... \n");
+        perror("echec ecoute ... \n");
         exit(1);
     }
 
-    printf("server is ready to receive clients ...\n");
+    printf("Serveur pret à recevoir les clients...\n");
 
     /**
      * dans cette boucle, on génère un thread
@@ -179,18 +180,18 @@ int main(int argc, char const *argv[])
         socklen_t client_len = sizeof(client_addr);
         int client_sock = accept(server_sock, (struct sockaddr*)&client_addr, &client_len);
         if (client_sock < 0) {
-            perror("accepting client connection failed ...\n");
+            perror("echec accepter ...\n");
             continue;
         }
 
         if (num_clients >= MAX_USERS) {
-            printf("Too many clients. Closing connection. \n");
+            printf("Trop de clients. Fermeture socket. \n");
             close(client_sock);
             continue;
         }
         
         // ne pas oublier l'id du client 
-        printf("connection accepted from client %d\n", client_sock);
+        printf("connexion acceptee pour le client %d\n", client_sock);
 
         /**ajout d'un client à chaque nouvelle
          * connextion en utilisant la structure
@@ -210,7 +211,7 @@ int main(int argc, char const *argv[])
         pthread_t thread;
         int *client_sock_ptr = malloc(sizeof(int));
         if (client_sock_ptr == NULL) {
-            perror("allocating memory for client socket failed ... \n");
+            perror("echec allocation memoire ... \n");
             close(client_sock);
             continue;
         }
@@ -218,20 +219,20 @@ int main(int argc, char const *argv[])
 
         // creation du thread généré
         if (pthread_create(&thread, NULL, handle_client, (void *)client_sock_ptr) != 0) {
-            perror("creating thread for client failed ... \n");
+            perror("echec creation thread ... \n");
             free(client_sock_ptr);
             close(client_sock);
             continue;
         }
 
         if (pthread_detach(thread) != 0) {
-            perror("detaching thread for client failed");
+            perror("echec detach thread");
             free(client_sock_ptr);
             close(client_sock);
             continue;
         }
 
-        printf("created thread for client ... \n");
+        printf("echec creation thread ... \n");
 
     }
     

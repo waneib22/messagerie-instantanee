@@ -6,27 +6,62 @@
 #include<sys/socket.h>
 #include<sys/types.h>
 #include<sys/un.h>
+#include<fcntl.h>
 #include<signal.h>
 
+// taille du message
 #define BUFFER_SIZE 1024
 
+/** le fichier dans lequel les clients
+ * et le serveur communiquent
+*/
 #define SOCK_PATH "./MySock"
 
-int composing_message = 0;
-pthread_cond_t cond_composing_signal;
-pthread_mutex_t mutex_composing_signal;
+int client_sock;
+pthread_cond_t cond_composing_signal = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex_composing_signal = PTHREAD_MUTEX_INITIALIZER;
 
 void handle_sigint(int signum) {
-    composing_message = 1;
-    pthread_cond_signal(&cond_composing_signal);
+    pthread_mutex_lock(&mutex_composing_signal);
+    printf("Affichage en pause. Entrer votre message:\n");
+    pthread_mutex_unlock(&mutex_composing_signal);
 }
 
+void* receive_messages(void *arg) {
+    char buffer[BUFFER_SIZE];
+
+    while(1) {
+        memset(buffer, 0, sizeof(buffer));
+
+        if (recv(client_sock, buffer, sizeof(buffer) -1, 0) < 0) {
+            perror("echec reception message ... \n");
+            exit(1);
+        }
+
+        int clientNumber;
+        char* message = NULL;
+        sscanf(buffer, "%d %[^\n]", &clientNumber, buffer);
+
+        message = (char*)malloc(strlen(buffer) + 1);
+        strcpy(message, buffer);
+
+        pthread_mutex_lock(&mutex_composing_signal);
+        printf("Message reçu a partir du client no. %d: %s\n", clientNumber, message);
+        pthread_mutex_unlock(&mutex_composing_signal);
+
+        free(message);
+
+        if (strcmp(buffer, "FIN") == 0) {
+            break;
+        }
+    }
+
+    pthread_exit(NULL);
+}
 
 int main(int argc, char const *argv[])
 {
-    
-    int client_sock;
-    int clientNumber;
+
     struct sockaddr_un server_sockaddr;
     char buffer[BUFFER_SIZE];
 
@@ -35,41 +70,34 @@ int main(int argc, char const *argv[])
     server_sockaddr.sun_family = AF_UNIX;
     strcpy(server_sockaddr.sun_path, SOCK_PATH);
 
-    // initialisation du mutex et de la condition
-    pthread_mutex_init(&mutex_composing_signal, NULL);
-    pthread_cond_init(&cond_composing_signal, &mutex_composing_signal);
-
-    // installation signal CTRL+C
-    signal(SIGINT, handle_sigint);
-
     // creation socket client
     client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock < 0) {
-        perror("creating client socket failed ...\n");
+        perror("echec creation socket ...\n");
         exit(1);
     }
 
     // tentative de connexion du client au serveur
     if (connect(client_sock, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) != 0) {
-        perror("connecting to server failed ... \n");
+        perror("echec connexion socket ... \n");
         exit(1);
     }
     
-    /**
-     * boucle infinie dans laquelle le client 
-     * envoie un message au serveur et reçoit
-     * un message de la part du serveur 
-    */ 
+    // installation signal CTRL+C
+    signal(SIGINT, handle_sigint);
+
+    pthread_t receive_thread;
+    if(pthread_create(&receive_thread, NULL, receive_messages, NULL) < 0) {
+        perror("echec creation thread ... \n");
+        exit(1);
+    }
+
+    printf("Bienvenue dans la messagerie!\n");
+
+
     while(1) {
-        printf("Enter your message (or 'exit' to quit): \n");
-
-        // Demande de blocage pour ecrire un message
         pthread_mutex_lock(&mutex_composing_signal);
-        while (composing_message)
-        {
-            pthread_cond_wait(&cond_composing_signal, &mutex_composing_signal);
-
-        }
+        printf("Entrer votre message (ou 'exit' pour quitter): \n");
         pthread_mutex_unlock(&mutex_composing_signal);
 
         fgets(buffer, sizeof(buffer), stdin);
@@ -80,7 +108,7 @@ int main(int argc, char const *argv[])
         }
 
         if (send(client_sock, buffer, strlen(buffer), 0) < 0) {
-            perror("sending message to server failed ... \n");
+            perror("echec envoi message au serveur ... \n");
             exit(1);
         }
 
@@ -89,26 +117,23 @@ int main(int argc, char const *argv[])
         {
             memset(buffer, 0, sizeof(buffer));
             if (recv(client_sock, buffer, sizeof(buffer) - 1, 0) < 0) {
-                perror("receiving messages from server failed ... \n");
+                perror("echec reception message a partir du serveur ... \n");
                 exit(1);
             }
 
-            if (strcmp(buffer, "END") == 0) {
+            if (strcmp(buffer, "FIN") == 0) {
                 break;
             }
         }
-        
 
-        if (recv(client_sock, buffer, sizeof(buffer) - 1, 0) < 0) {
-            perror("receiving message failed ... \n");
-            exit(1);
-        }
+        int clientNumber;
 
         sscanf(buffer, "%d %[^\n]", &clientNumber, buffer);
 
-        printf("received message from client %d, %s\n", clientNumber, buffer);
+        printf("Message recu a partir du client no %d, %s\n", clientNumber, buffer);
     }
 
+    pthread_join(receive_thread, NULL);
     close(client_sock);
     exit(0);
 
